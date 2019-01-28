@@ -5,7 +5,6 @@ extern crate unic_char_range;
 
 use clap::ArgMatches;
 use rand::prelude::*;
-use std::convert::From;
 
 pub struct Config {
     choices: Vec<char>,
