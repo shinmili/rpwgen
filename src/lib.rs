@@ -76,6 +76,7 @@ impl<'a> From<ArgMatches<'a>> for Config {
                 if let Ok(choices) = unfold_range_notation(choices) {
                     config.choices = choices;
                 }
+                // TODO: Invalid notation should be reported. Currently it's just ignored.
             }
         }
         if let Some(length_str) = matches.value_of("length") {
