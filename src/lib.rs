@@ -15,27 +15,46 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Config {
-            choices: unfold_range_notation("0-9A-Za-z"),
+            choices: unfold_range_notation("0-9A-Za-z").unwrap(),
             length: 16,
         }
     }
 }
 
-fn unfold_range_notation(s: &str) -> Vec<char> {
+#[derive(Debug, PartialEq, Eq)]
+enum UnfoldError {
+    StartsWithHyphen,
+    EndsWithHyphen,
+    EndsWithBackSlash,
+}
+
+fn unfold_range_notation(s: &str) -> Result<Vec<char>, UnfoldError> {
     let mut choices = vec![];
     let mut chars = s.chars().peekable();
-    while let Some(c) = chars.next() {
+
+    if chars.peek() == Some(&'-') {
+        return Err(UnfoldError::StartsWithHyphen);
+    }
+
+    while let Some(c) = Escape::from(chars.by_ref()).next() {
+        if c.is_err() {
+            return Err(UnfoldError::EndsWithBackSlash);
+        }
+        let c = c.unwrap();
         if let Some(&maybe_hyphen) = chars.peek() {
             if maybe_hyphen == '-' {
-                if let Some(d) = chars.nth(1) {
+                if let Some(d) = Escape::from(chars.by_ref()).nth(1) {
+                    if d.is_err() {
+                        return Err(UnfoldError::EndsWithBackSlash);
+                    }
+                    let d = d.unwrap();
                     // /.-./
                     for c in chars!(c..=d) {
                         choices.push(c);
                     }
                 } else {
                     // /.-$/
-                    choices.push(c);
-                    choices.push('-');
+                    return Err(UnfoldError::EndsWithHyphen);
                 }
             } else {
                 // /.[^-]/
@@ -46,7 +65,7 @@ fn unfold_range_notation(s: &str) -> Vec<char> {
             choices.push(c);
         }
     }
-    return choices;
+    return Ok(choices);
 }
 
 impl<'a> From<ArgMatches<'a>> for Config {
@@ -54,7 +73,9 @@ impl<'a> From<ArgMatches<'a>> for Config {
         let mut config = Config::default();
         if let Some(choices) = matches.value_of("chars") {
             if !choices.is_empty() {
-                config.choices = unfold_range_notation(choices)
+                if let Ok(choices) = unfold_range_notation(choices) {
+                    config.choices = choices;
+                }
             }
         }
         if let Some(length_str) = matches.value_of("length") {
@@ -74,31 +95,82 @@ pub fn generate(config: &Config) -> String {
         .collect()
 }
 
+struct Escape<T> {
+    inner: T,
+}
+
+impl<T> From<T> for Escape<T> {
+    fn from(inner: T) -> Escape<T> {
+        Escape { inner }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct EscapeError;
+impl<T> Iterator for Escape<T>
+where
+    T: Iterator<Item = char>,
+{
+    type Item = Result<char, EscapeError>;
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.inner.next() {
+            Some('\\') => self.inner.next().map(Ok).or(Some(Err(EscapeError))),
+            c => c.map(Ok),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_unfold_range_notation() {
+    fn test_successful_unfold() {
         assert_eq!(
             unfold_range_notation("abcABC012"),
-            "abcABC012".chars().collect::<Vec<char>>()
+            Ok("abcABC012".chars().collect::<Vec<char>>())
         );
         assert_eq!(
             unfold_range_notation("a-g"),
-            "abcdefg".chars().collect::<Vec<char>>()
+            Ok("abcdefg".chars().collect::<Vec<char>>())
         );
         assert_eq!(
             unfold_range_notation("a-gA-G"),
-            "abcdefgABCDEFG".chars().collect::<Vec<char>>()
+            Ok("abcdefgABCDEFG".chars().collect::<Vec<char>>())
         );
         assert_eq!(
             unfold_range_notation("a-cde-g"),
-            "abcdefg".chars().collect::<Vec<char>>()
+            Ok("abcdefg".chars().collect::<Vec<char>>())
         );
         assert_eq!(
             unfold_range_notation("e-gda-c"),
-            "efgdabc".chars().collect::<Vec<char>>()
+            Ok("efgdabc".chars().collect::<Vec<char>>())
+        );
+    }
+
+    #[test]
+    fn test_successful_unfold_with_escape() {
+        assert_eq!(unfold_range_notation(r"\\"), Ok(vec!['\\']));
+        assert_eq!(unfold_range_notation(r"\-"), Ok(vec!['-']));
+        assert_eq!(
+            unfold_range_notation(r#"0-2A-Ca-c\-_"#),
+            Ok("012ABCabc-_".chars().collect::<Vec<char>>())
+        );
+    }
+
+    #[test]
+    fn test_syntax_error() {
+        assert_eq!(
+            unfold_range_notation("-Za-z0-9"),
+            Err(UnfoldError::StartsWithHyphen)
+        );
+        assert_eq!(
+            unfold_range_notation("A-Za-z0-"),
+            Err(UnfoldError::EndsWithHyphen)
+        );
+        assert_eq!(
+            unfold_range_notation(r"A-Z/\"),
+            Err(UnfoldError::EndsWithBackSlash)
         );
     }
 }
