@@ -124,28 +124,23 @@ where
 mod tests {
     use super::*;
 
+    fn to_vec_char(s: &str) -> Vec<char> {
+        s.chars().collect()
+    }
+
     #[test]
     fn test_successful_unfold() {
         assert_eq!(
             unfold_range_notation("abcABC012"),
-            Ok("abcABC012".chars().collect::<Vec<char>>())
+            Ok(to_vec_char("abcABC012"))
         );
-        assert_eq!(
-            unfold_range_notation("a-g"),
-            Ok("abcdefg".chars().collect::<Vec<char>>())
-        );
+        assert_eq!(unfold_range_notation("a-g"), Ok(to_vec_char("abcdefg")));
         assert_eq!(
             unfold_range_notation("a-gA-G"),
-            Ok("abcdefgABCDEFG".chars().collect::<Vec<char>>())
+            Ok(to_vec_char("abcdefgABCDEFG"))
         );
-        assert_eq!(
-            unfold_range_notation("a-cde-g"),
-            Ok("abcdefg".chars().collect::<Vec<char>>())
-        );
-        assert_eq!(
-            unfold_range_notation("e-gda-c"),
-            Ok("efgdabc".chars().collect::<Vec<char>>())
-        );
+        assert_eq!(unfold_range_notation("a-cde-g"), Ok(to_vec_char("abcdefg")));
+        assert_eq!(unfold_range_notation("e-gda-c"), Ok(to_vec_char("efgdabc")));
     }
 
     #[test]
@@ -154,7 +149,7 @@ mod tests {
         assert_eq!(unfold_range_notation(r"\-"), Ok(vec!['-']));
         assert_eq!(
             unfold_range_notation(r#"0-2A-Ca-c\-_"#),
-            Ok("012ABCabc-_".chars().collect::<Vec<char>>())
+            Ok(to_vec_char("012ABCabc-_"))
         );
     }
 
